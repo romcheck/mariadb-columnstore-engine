@@ -330,6 +330,7 @@ int  Dctnry::expandDctnryExtent()
                                        blksToAdd,
                                        m_dctnryHeader2,
                                        m_totalHdrBytes,
+                                       true,
                                        true );
 
     if (rc != NO_ERROR)
