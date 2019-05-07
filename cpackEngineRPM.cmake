@@ -119,6 +119,13 @@ SET(ignored
 #%define _prefix ${CMAKE_INSTALL_PREFIX}
 #")
 
+SET(CPACK_RPM_platform_USER_FILELIST ${ignored})
+
+SET(CPACK_RPM_libs_USER_FILELIST ${ignored})
+
+SET(CPACK_RPM_storage-engine_USER_FILELIST ${ignored})
+
+
 INCLUDE (CPack)
 
 ENDIF()
