@@ -108,7 +108,10 @@ enum ColType                            /** @brief Column type enumeration*/
     WR_USHORT           = 14,           /** @brief Unsigned Short */
     WR_UINT             = 15,           /** @brief Unsigned Int */
     WR_ULONGLONG        = 16,           /** @brief Unsigned Long long*/
-    WR_TEXT             = 17            /** @brief TEXT */
+    WR_TEXT             = 17,           /** @brief TEXT */
+    WR_MEDINT           = 18,           /** @brief Medium Int */
+    WR_UMEDINT          = 19,           /** @brief Unsigned Medium Int */
+    WR_BINARY           = 20,           /** @brief BINARY */            
 };
 
 // Describes relation of field to column for a bulk load
@@ -490,49 +493,6 @@ struct CacheControl                     /** @brief Cache control structure */
         totalBlock = pctFree = checkInterval;    /** @brief constructor */
     }
 };
-
-/************************************************************************
- * @brief Bulk parse meta data describing data in a read buffer.
- * An offset of COLPOSPAIR_NULL_TOKEN_OFFSET represents a null token.
- ************************************************************************/
-struct ColPosPair            /** @brief Column position pair structure */
-{
-    int               start;  /** @brief start position */
-    int               offset; /** @brief length of token*/
-};
-
-/************************************************************************
- * @brief SecondaryShutdown used to terminate a thread when it sees that the
- * JobStatus flag has been set to EXIT_FAILURE (by another thread).
- ************************************************************************/
-class SecondaryShutdownException : public std::runtime_error
-{
-public:
-    SecondaryShutdownException(const std::string& msg) :
-        std::runtime_error(msg) { }
-};
-
-/************************************************************************
- * @brief Generic exception class used to store exception string and error
- * code for a writeengine error.
- ************************************************************************/
-class WeException : public std::runtime_error
-{
-public:
-    WeException(const std::string& msg, int err = 0) :
-        std::runtime_error(msg), fErrorCode(err) { }
-    void errorCode(int code)
-    {
-        fErrorCode = code;
-    }
-    int  errorCode() const
-    {
-        return fErrorCode;
-    }
-private:
-    int fErrorCode;
-};
-
 } //end of namespace
 
 #endif // _WE_TYPE_H_

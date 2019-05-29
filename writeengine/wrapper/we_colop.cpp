@@ -1673,6 +1673,12 @@ int ColumnOp::writeRow(Column& curCol, uint64_t totalRow, const RID* rowIdArray,
                 //pOldVal = &((uint64_t *) oldValArray)[i];
                 break;
 
+            case WriteEngine::WR_BINARY:
+                if (!bDelete) pVal = (uint8_t*) valArray + i * curCol.colWidth;
+                
+                //pOldVal = (uint8_t*) oldValArray + i * curCol.colWidth;
+                break;
+                
             default  :
                 if (!bDelete) pVal = &((int*) valArray)[i];
 

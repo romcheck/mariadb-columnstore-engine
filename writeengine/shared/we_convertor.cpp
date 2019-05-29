@@ -743,7 +743,11 @@ int Convertor::getCorrectRowWidth(CalpontSystemCatalog::ColDataType dataType, in
         case CalpontSystemCatalog::TIME:
             newWidth = 8;
             break;
-
+        
+        case CalpontSystemCatalog::BINARY:
+            newWidth = width;
+            break;
+            
         case CalpontSystemCatalog::CHAR:
         case CalpontSystemCatalog::VARCHAR:
         case CalpontSystemCatalog::VARBINARY: // treat same as varchar for now
