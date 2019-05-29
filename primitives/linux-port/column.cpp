@@ -49,6 +49,8 @@ using namespace execplan;
 namespace
 {
 
+const int8_t BIT_N[33] = {0,0,1,0,2,0,0,0,3,0,0,0,0,0,0,0,4,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,5};
+
 inline uint64_t order_swap(uint64_t x)
 {
     uint64_t ret = (x >> 56) |
@@ -274,6 +276,13 @@ template<int>
 inline bool isEmptyVal(uint8_t type, const uint8_t* val8);
 
 template<>
+inline bool isEmptyVal<16>(uint8_t type, const uint8_t* ival) // For BINARY
+{
+    const uint64_t* val = reinterpret_cast<const uint64_t*>(ival);
+    return false;
+}
+
+template<>
 inline bool isEmptyVal<8>(uint8_t type, const uint8_t* ival)
 {
     const uint64_t* val = reinterpret_cast<const uint64_t*>(ival);
@@ -388,6 +397,12 @@ inline bool isEmptyVal<1>(uint8_t type, const uint8_t* ival)
 
 template<int>
 inline bool isNullVal(uint8_t type, const uint8_t* val8);
+
+template<>
+inline bool isNullVal<16>(uint8_t type, const uint8_t* ival) // For BINARY
+{
+    return false;
+}
 
 template<>
 inline bool isNullVal<8>(uint8_t type, const uint8_t* ival)
@@ -686,32 +701,8 @@ inline void store(const NewColRequestHeader* in,
 #endif
 
         void* ptr1 = &out8[*written];
-        const uint8_t* ptr2 = &block8[0];
-
-        switch (in->DataSize)
-        {
-            default:
-            case 8:
-                ptr2 += (rid << 3);
-                memcpy(ptr1, ptr2, 8);
-                break;
-
-            case 4:
-                ptr2 += (rid << 2);
-                memcpy(ptr1, ptr2, 4);
-                break;
-
-            case 2:
-                ptr2 += (rid << 1);
-                memcpy(ptr1, ptr2, 2);
-                break;
-
-            case 1:
-                ptr2 += (rid << 0);
-                memcpy(ptr1, ptr2, 1);
-                break;
-        }
-
+        const uint8_t* ptr2 = block8 + (rid << BIT_N[in->DataSize]);
+        memcpy(ptr1, ptr2, in->DataSize);
         *written += in->DataSize;
     }
 
@@ -730,7 +721,7 @@ inline uint64_t nextUnsignedColValue(int type,
                                      uint8_t OutputType, uint8_t* val8, unsigned itemsPerBlk)
 {
     const uint8_t* vp = 0;
-
+//cout << "nextUnsignedColValue" << endl;
     if (ridArray == NULL)
     {
         while (static_cast<unsigned>(*index) < itemsPerBlk &&
@@ -771,6 +762,7 @@ inline uint64_t nextUnsignedColValue(int type,
         *rid = ridArray[(*index)++];
     }
 
+    //cout << "nextUnsignedColValue index " << *index <<  " rowid " << *rid << endl;
     // at this point, nextRid is the index to return, and index is...
     //   if RIDs are not specified, nextRid + 1,
     //	 if RIDs are specified, it's the next index in the rid array.
@@ -789,6 +781,9 @@ inline uint64_t nextUnsignedColValue(int type,
         case 8:
             return reinterpret_cast<uint64_t*>(val8)[*rid];
 
+        case 16:
+           return reinterpret_cast<uint64_t*>(val8)[*rid * 2];
+
         default:
             logIt(33, W);
 
@@ -796,6 +791,50 @@ inline uint64_t nextUnsignedColValue(int type,
             throw logic_error("PrimitiveProcessor::nextColValue() bad width");
 #endif
             return -1;
+    }
+}
+template<int W>
+inline uint8_t* nextBinColValue(int type,
+                                     const uint16_t* ridArray,
+                                     int NVALS,
+                                     int* index,
+                                     bool* done,
+                                     bool* isNull,
+                                     bool* isEmpty,
+                                     uint16_t* rid,
+                                     uint8_t OutputType, uint8_t* val8, unsigned itemsPerBlk)
+{
+    if (ridArray == NULL)
+    {
+        if (static_cast<unsigned>(*index) >= itemsPerBlk)
+        {
+            *done = true;
+            return NULL;
+        }
+        *rid = (*index)++;
+    }
+    else
+    {
+        if (*index >= NVALS)
+        {
+            *done = true;
+            return NULL;
+        }
+        *rid = ridArray[(*index)++];
+    }
+
+    *isNull = false;
+    *isEmpty = false;
+    //cout << "nextUnsignedColValue index " << *index <<  " rowid " << *rid << endl;
+    // at this point, nextRid is the index to return, and index is...
+    //   if RIDs are not specified, nextRid + 1,
+    //	 if RIDs are specified, it's the next index in the rid array.
+    return &val8[*rid * W];
+
+#ifdef PRIM_DEBUG
+            throw logic_error("PrimitiveProcessor::nextColValue() bad width");
+#endif
+            return NULL;
     }
 }
 
@@ -1413,6 +1452,221 @@ inline void p_Col_ridArray(NewColRequestHeader* in,
 #endif
 }
 
+// for BINARY
+template<int W>
+inline void p_Col_bin_ridArray(NewColRequestHeader* in,
+                           NewColResultHeader* out,
+                           unsigned outSize,
+                           unsigned* written, int* block, Stats* fStatsPtr, unsigned itemsPerBlk,
+                           boost::shared_ptr<ParsedColumnFilter> parsedColumnFilter)
+{
+    uint16_t* ridArray = 0;
+    uint8_t* in8 = reinterpret_cast<uint8_t*>(in);
+    const uint8_t filterSize = sizeof(uint8_t) + sizeof(uint8_t) + W;
+    idb_regex_t placeholderRegex;
+    placeholderRegex.used = false;
+
+    if (in->NVALS > 0)
+        ridArray = reinterpret_cast<uint16_t*>(&in8[sizeof(NewColRequestHeader) +
+                                                                           (in->NOPS * filterSize)]);
+
+    if (ridArray && 1 == in->sort )
+    {
+        qsort(ridArray, in->NVALS, sizeof(uint16_t), compareBlock<uint16_t>);
+
+        if (fStatsPtr)
+#ifdef _MSC_VER
+            fStatsPtr->markEvent(in->LBID, GetCurrentThreadId(), in->hdr.SessionID, 'O');
+
+#else
+            fStatsPtr->markEvent(in->LBID, pthread_self(), in->hdr.SessionID, 'O');
+#endif
+    }
+
+    // Set boolean indicating whether to capture the min and max values.
+    out->ValidMinMax = isMinMaxValid(in);
+
+    if (out->ValidMinMax)
+    {
+        if (isUnsigned((CalpontSystemCatalog::ColDataType)in->DataType))
+        {
+            out->Min = static_cast<int64_t>(numeric_limits<uint64_t>::max());
+            out->Max = 0;
+        }
+        else
+        {
+            out->Min = numeric_limits<int64_t>::max();
+            out->Max = numeric_limits<int64_t>::min();
+        }
+    }
+    else
+    {
+        out->Min = 0;
+        out->Max = 0;
+    }
+
+    typedef char binWtype [W];
+
+    const ColArgs* args = NULL;
+    int64_t val = 0;
+    binWtype* bval;
+    int nextRidIndex = 0, argIndex = 0;
+    bool done = false, cmp = false, isNull = false, isEmpty = false;
+    uint16_t rid = 0;
+    prestored_set_t::const_iterator it;
+
+    binWtype* argVals = (binWtype*)alloca(in->NOPS * W);
+    uint8_t* std_cops = (uint8_t*)alloca(in->NOPS * sizeof(uint8_t));
+    uint8_t* std_rfs = (uint8_t*)alloca(in->NOPS * sizeof(uint8_t));
+    uint8_t* cops = NULL;
+    uint8_t* rfs = NULL;
+
+    scoped_array<idb_regex_t> std_regex;
+    idb_regex_t* regex = NULL;
+    uint8_t likeOps = 0;
+
+// no pre-parsed column filter is set, parse the filter in the message
+    if (parsedColumnFilter.get() == NULL) {
+        std_regex.reset(new idb_regex_t[in->NOPS]);
+        regex = &(std_regex[0]);
+
+        cops = std_cops;
+        rfs = std_rfs;
+
+        for (argIndex = 0; argIndex < in->NOPS; argIndex++) {
+            args = reinterpret_cast<const ColArgs*> (&in8[sizeof (NewColRequestHeader) +
+                    (argIndex * filterSize)]);
+            cops[argIndex] = args->COP;
+            rfs[argIndex] = args->rf;
+
+            memcpy(argVals[argIndex],args->val, W);
+        }
+
+        regex[argIndex].used = false;
+    }
+
+
+    // else we have a pre-parsed filter, and it's an unordered set for quick == comparisons
+    bval = (binWtype*)nextBinColValue<W>(in->DataType, ridArray, in->NVALS, &nextRidIndex, &done, &isNull,
+                &isEmpty, &rid, in->OutputType, reinterpret_cast<uint8_t*>(block), itemsPerBlk);
+
+    while (!done)
+    {
+
+//        if((*((uint64_t *) (bval))) != 0)
+//        {
+//            cout << "rid "<< rid << " value ";
+//            if(W > 16) printf("%016X%016X ",( *(((uint64_t *) (bval)) +3)),(*(((uint64_t *) (bval)) +2)));
+//            printf("%016X%016X ",( *(((uint64_t *) (bval)) +1)),(*((uint64_t *) (bval))) );
+//
+//            cout << endl;
+//        }
+
+        if (cops == NULL)    // implies parsedColumnFilter && columnFilterMode == SET
+        {
+            /* bug 1920: ignore NULLs in the set and in the column data */
+            if (!(isNull && in->BOP == BOP_AND))
+            {
+                //cout << "HERE5 ";
+
+                it = parsedColumnFilter->prestored_set->find(val);
+
+
+                if (in->BOP == BOP_OR)
+                {
+                    // assume COP == COMPARE_EQ
+                    if (it != parsedColumnFilter->prestored_set->end())
+                    {
+                        store(in, out, outSize, written, rid, reinterpret_cast<const uint8_t*>(block));
+                    }
+                }
+                else if (in->BOP == BOP_AND)
+                {
+                    // assume COP == COMPARE_NE
+                    if (it == parsedColumnFilter->prestored_set->end())
+                    {
+                        store(in, out, outSize, written, rid, reinterpret_cast<const uint8_t*>(block));
+                    }
+                }
+            }
+        }
+        else
+        {
+            for (argIndex = 0; argIndex < in->NOPS; argIndex++)
+            {
+
+//               if((*((uint64_t *) (uval))) != 0) cout << "comparing " << dec << (*((uint64_t *) (uval)))  << " to " << (*((uint64_t *) (argVals[argIndex])))  << endl;
+
+                int val1 = memcmp(*bval, &argVals[argIndex], W);
+
+                switch (cops[argIndex]) {
+                    case COMPARE_NIL:
+                        cmp = false;
+                        break;
+                    case COMPARE_LT:
+                        cmp = val1 < 0;
+                        break;
+                    case COMPARE_EQ:
+                        cmp = val1 == 0;
+                        break;
+                    case COMPARE_LE:
+                        cmp = val1 <= 0;
+                        break;
+                    case COMPARE_GT:
+                        cmp = val1 > 0;
+                        break;
+                    case COMPARE_NE:
+                        cmp = val1 != 0;
+                        break;
+                    case COMPARE_GE:
+                        cmp = val1 >= 0;
+                        break;
+                    default:
+                        logIt(34, cops[argIndex], "colCompare");
+                        cmp = false; // throw an exception here?
+                }
+
+//              cout << cmp << endl;
+
+                if (in->NOPS == 1)
+                {
+                    if (cmp == true)
+                    {
+                        store(in, out, outSize, written, rid, reinterpret_cast<const uint8_t*>(block));
+                    }
+
+                    break;
+                }
+                else if (in->BOP == BOP_AND && cmp == false)
+                {
+                    break;
+                }
+                else if (in->BOP == BOP_OR && cmp == true)
+                {
+                    store(in, out, outSize, written, rid, reinterpret_cast<const uint8_t*>(block));
+                    break;
+                }
+            }
+
+            if ((argIndex == in->NOPS && in->BOP == BOP_AND) || in->NOPS == 0)
+            {
+                store(in, out, outSize, written, rid, reinterpret_cast<const uint8_t*>(block));
+            }
+        }
+
+        bval = (binWtype*)nextBinColValue<W>(in->DataType, ridArray, in->NVALS, &nextRidIndex, &done, &isNull,
+            &isEmpty, &rid, in->OutputType, reinterpret_cast<uint8_t*>(block), itemsPerBlk);
+
+    }
+
+    if (fStatsPtr)
+#ifdef _MSC_VER
+        fStatsPtr->markEvent(in->LBID, GetCurrentThreadId(), in->hdr.SessionID, 'K');
+
+#else
+        fStatsPtr->markEvent(in->LBID, pthread_self(), in->hdr.SessionID, 'K');
+#endif
+        
 } //namespace anon
 
 namespace primitives
@@ -1460,29 +1714,17 @@ void PrimitiveProcessor::p_Col(NewColRequestHeader* in, NewColResultHeader* out,
         fStatsPtr->markEvent(in->LBID, pthread_self(), in->hdr.SessionID, 'B');
 #endif
 
-    switch (in->DataSize)
-    {
-        case 8:
-            p_Col_ridArray<8>(in, out, outSize, written, block, fStatsPtr, itemsPerBlk, parsedColumnFilter);
-            break;
+        // Just to abreviate code
+        void ( * const F[])(NewColRequestHeader* in,
+                NewColResultHeader* out,
+                unsigned outSize,
+                unsigned* written, int* block, Stats* fStatsPtr, unsigned itemsPerBlk,
+                boost::shared_ptr<ParsedColumnFilter> parsedColumnFilter) =
+        {p_Col_ridArray<1>, p_Col_ridArray<2>,
+            p_Col_ridArray<4>, p_Col_ridArray<8>,
+            p_Col_bin_ridArray<16>, p_Col_bin_ridArray<32>};
 
-        case 4:
-            p_Col_ridArray<4>(in, out, outSize, written, block, fStatsPtr, itemsPerBlk, parsedColumnFilter);
-            break;
-
-        case 2:
-            p_Col_ridArray<2>(in, out, outSize, written, block, fStatsPtr, itemsPerBlk, parsedColumnFilter);
-            break;
-
-        case 1:
-            p_Col_ridArray<1>(in, out, outSize, written, block, fStatsPtr, itemsPerBlk, parsedColumnFilter);
-            break;
-
-        default:
-            idbassert(0);
-            break;
-    }
-
+        F[BIT_N[in->DataSize]](in, out, outSize, written, block, fStatsPtr, itemsPerBlk, parsedColumnFilter);
     if (fStatsPtr)
 #ifdef _MSC_VER
         fStatsPtr->markEvent(in->LBID, GetCurrentThreadId(), in->hdr.SessionID, 'C');

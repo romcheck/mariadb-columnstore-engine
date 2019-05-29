@@ -160,7 +160,8 @@ public:
         NUM_OF_COL_DATA_TYPE, /* NEW TYPES ABOVE HERE */
         LONGDOUBLE,		/* @bug3241, dev and variance calculation only */
         STRINT,			/* @bug3532, string as int for fast comparison */
-        UNDEFINED       /*!< Undefined - used in UDAF API */
+        UNDEFINED,              /*!< Undefined - used in UDAF API */
+        BINARY,                 /*!< BINARY type */
     };
 
     /** the set of column constraint types
