@@ -1,5 +1,6 @@
 include_guard(GLOBAL)
 
+
 option(USE_CLANG_TIDY "Perform scan with clang-tidy" FALSE)
 
 if(NOT USE_CLANG_TIDY)
