@@ -1790,7 +1790,17 @@ void BRMWrapper::writeVBEnd(const VER_t transID, std::vector<LBIDRange>& rangeLi
     if (idbdatafile::IDBPolicy::useHdfs())
         return;
 
-    blockRsltnMgrPtr->endVBCopy(transID, rangeList);
+    // MCOL-3490
+    int failCounter = 10;
+    int rc = 1;
+    for(int i = 0; rc && i < failCounter; i++)
+    {
+        rc = blockRsltnMgrPtr->endVBCopy(transID, rangeList);
+        if (rc)
+        {
+            std::usleep(500000);
+        }
+    }
 }
 
 } //end of namespace
