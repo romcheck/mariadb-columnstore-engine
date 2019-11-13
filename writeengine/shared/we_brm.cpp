@@ -1524,7 +1524,6 @@ int BRMWrapper::writeVB(IDBDataFile* pFile, const VER_t transID, const OID oid, 
     fboList.push_back(fbo);
     std::vector<VBRange> freeList;
     int rc = writeVB(pFile, transID, oid, fboList, rangeList, pFileOp, freeList, dbRoot);
-    //writeVBEnd(transID,rangeList);
     return rc;
 }
 
@@ -1560,13 +1559,6 @@ void BRMWrapper::pruneLBIDList(VER_t transID, vector<LBIDRange>* rangeList,
         }
     }
 
-    /*	if (newrangeList.size() != rangeList->size()) {
-    		cout << "Lbidlist is pruned, and the original list is: " << endl;
-    		for (uint32_t i = 0; i < rangeList->size(); i++)
-    		{
-               cout << "lbid : " << (*rangeList)[i].start << endl;
-    		}
-    	} */
     newrangeList.swap(*rangeList);
     newfboList.swap(*fboList);
 }
@@ -1582,7 +1574,6 @@ int BRMWrapper::writeVB(IDBDataFile* pSourceFile, const VER_t transID, const OID
     size_t processedBlocks;
     size_t rangeListCount;
     size_t k = 0;
-    //std::vector<VBRange> freeList;
     IDBDataFile* pTargetFile;
     int32_t vbOid;
 
@@ -1605,38 +1596,12 @@ int BRMWrapper::writeVB(IDBDataFile* pSourceFile, const VER_t transID, const OID
             cout << "\t weFbo : " << fboList[i] << endl;
     }
 
-    /*	cout << "\nIn writeVB" << endl;
-        cout << "\n\tTransId=" << transID << endl;
-        cout << "\t weOid : " << weOid << endl;
-        cout << "\trangeList size=" << rangeList.size();
-        for (i = 0; i < rangeList.size(); i++)
-        {
-                cout << "\t weLBID start : " << rangeList[i].start << endl;
-        }
-    */
     if (!skipBeginVBCopy)
     {
         pruneLBIDList(transID, &rangeList, &fboList);
 
-        /*	cout << "\nIn writeVB" << endl;
-            cout << "\n\tTransId=" << transID << endl;
-            cout << "\t weOid : " << weOid << endl;
-            cout << "\trangeList size=" << rangeList.size();
-            for (i = 0; i < rangeList.size(); i++)
-            {
-                    cout << "\t weLBID start : " << rangeList[i].start << endl;
-            }
-        */
         if (rangeList.empty())   // all blocks have already been versioned
             return NO_ERROR;
-
-        //Find the dbroot for a lbid
-        //OID_t oid;
-        //uint16_t segmentNum;
-        //uint32_t partitionNum, fileBlockOffset;
-        //rc = blockRsltnMgrPtr->lookupLocal(rangeList[0].start, transID, false, oid, dbRoot, partitionNum, segmentNum, fileBlockOffset);
-        //if (rc != NO_ERROR)
-        //	return rc;
 
         rc = blockRsltnMgrPtr->beginVBCopy(transID, dbRoot, rangeList, freeList);
 
@@ -1675,21 +1640,12 @@ int BRMWrapper::writeVB(IDBDataFile* pSourceFile, const VER_t transID, const OID
         }
     }
 
-    /*	for (i = 0; i < freeList.size(); i++)
-            {
-                cout << "\t VBOid : " << freeList[i].vbOID ;
-                cout << " VBFBO : " << freeList[i].vbFBO ;
-                cout << " Size : " << freeList[i].size << endl;
-            }
-    */
     //@Bug 2371 The assumption of all entries in the freelist belong to the same version buffer file is wrong
     // Open the first version buffer file
     File fileInfo;
-//   size_t rootCnt = Config::DBRootCount();
     fileInfo.oid = freeList[0].vbOID;
     fileInfo.fPartition = 0;
     fileInfo.fSegment = 0;
-//    fileInfo.fDbRoot = (freeList[0].vbOID % rootCnt) + 1;
     fileInfo.fDbRoot = dbRoot;
     mutex::scoped_lock lk(vbFileLock);
     pTargetFile = openFile(fileInfo, "r+b", true);
@@ -1791,15 +1747,17 @@ void BRMWrapper::writeVBEnd(const VER_t transID, std::vector<LBIDRange>& rangeLi
         return;
 
     // MCOL-3490
-    int failCounter = 10;
-    int rc = 1;
-    for(int i = 0; rc && i < failCounter; i++)
+    int rc1st = 0;
+    int rc2nd = 0;
+    rc1st = blockRsltnMgrPtr->endVBCopy(transID, rangeList);
+    if (rc1st)
     {
-        rc = blockRsltnMgrPtr->endVBCopy(transID, rangeList);
-        if (rc)
-        {
-            std::usleep(500000);
-        }
+        rc2nd = blockRsltnMgrPtr->endVBCopy(transID, rangeList);
+        logging::Message::Args args;
+        args.add("writeVBEnd");
+        args.add(rc1st);
+        args.add(rc2nd);
+        SimpleSysLog::instance()->logMsg(args, logging::LOG_TYPE_ERROR, logging::M0105);
     }
 }
 

@@ -1332,7 +1332,6 @@ uint8_t WE_DMLCommandProc::processBatchInsert(messageqcpp::ByteStream& bs, std::
 
     if (fIsFirstBatchPm && isAutocommitOn)
     {
-        //fWEWrapper.writeVBEnd(txnid.id, rangeList);
         fIsFirstBatchPm = false;
     }
     else if (fIsFirstBatchPm)
@@ -2070,7 +2069,6 @@ uint8_t WE_DMLCommandProc::processBatchInsertBinary(messageqcpp::ByteStream& bs,
 
     if (fIsFirstBatchPm && isAutocommitOn)
     {
-        //fWEWrapper.writeVBEnd(txnid.id, rangeList);
         fIsFirstBatchPm = false;
     }
     else if (fIsFirstBatchPm)
@@ -2648,7 +2646,6 @@ uint8_t WE_DMLCommandProc::processUpdate(messageqcpp::ByteStream& bs,
     rowgroup::RGData rgData;
     rgData.deserialize(bs);
     rowGroups[txnId]->setData(&rgData);
-    //rowGroups[txnId]->setData(const_cast<uint8_t*>(bs.buf()));
     //get rows and values
     rowgroup::Row row;
     rowGroups[txnId]->initRow(&row);
@@ -4264,15 +4261,12 @@ uint8_t WE_DMLCommandProc::updateSyscolumnNextval(ByteStream& bs, std::string& e
     bs >> sessionID;
     uint16_t dbRoot;
     std::map<uint32_t, uint32_t> oids;
-    //std::vector<BRM::OID_t>  oidsToFlush;
     oids[columnOid] = columnOid;
-    //oidsToFlush.push_back(columnOid);
     BRM::OID_t oid = 1021;
     fDbrm.getSysCatDBRoot(oid, dbRoot);
     fWEWrapper.setTransId(sessionID);
     fWEWrapper.setBulkFlag(false);
     fWEWrapper.startTransaction(sessionID);
-    //cout << "updateSyscolumnNextval startTransaction id " << sessionID << endl;
     rc = fWEWrapper.updateNextValue(sessionID, columnOid, nextVal, sessionID, dbRoot);
 
     if (rc != 0)
@@ -4283,14 +4277,11 @@ uint8_t WE_DMLCommandProc::updateSyscolumnNextval(ByteStream& bs, std::string& e
 
     if (idbdatafile::IDBPolicy::useHdfs())
     {
-        cout << "updateSyscolumnNextval flushDataFiles  " <<  endl;
         int rc1 = fWEWrapper.flushDataFiles(rc, sessionID, oids);
 
         if ((rc == 0) && ( rc1 == 0))
         {
-            cout << "updateSyscolumnNextval confirmTransaction rc =0  " << endl;
             rc1 = fWEWrapper.confirmTransaction(sessionID);
-            cout << "updateSyscolumnNextval confirmTransaction return code is  " << rc1 << endl;
 
             if ( rc1 == NO_ERROR)
                 rc1 = fWEWrapper.endTransaction(sessionID, true);
@@ -4299,7 +4290,6 @@ uint8_t WE_DMLCommandProc::updateSyscolumnNextval(ByteStream& bs, std::string& e
         }
         else
         {
-            cout << "updateSyscolumnNextval endTransaction with error  " << endl;
             fWEWrapper.endTransaction(sessionID, false);
 
         }
@@ -4308,8 +4298,6 @@ uint8_t WE_DMLCommandProc::updateSyscolumnNextval(ByteStream& bs, std::string& e
             rc = rc1;
     }
 
-    //if (idbdatafile::IDBPolicy::useHdfs())
-    //	cacheutils::flushOIDsFromCache(oidsToFlush);
     return rc;
 }
 

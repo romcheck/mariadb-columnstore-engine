@@ -50,31 +50,6 @@ const string Logger::logMessage(LOG_TYPE logLevel, Message::MessageID mid, const
     msg.format(args);
 
     return logMessage(logLevel, msg, logInfo);
-    /*
-    mutex::scoped_lock lk(fLogLock);
-    fMl1.logData(logInfo);
-
-    switch (logLevel)
-    {
-        case LOG_TYPE_DEBUG:
-    default:
-    	fMl1.logDebugMessage(msg);
-    	break;
-        case LOG_TYPE_INFO:
-    	fMl1.logInfoMessage(msg);
-    	break;
-        case LOG_TYPE_WARNING:
-    	fMl1.logWarningMessage(msg);
-    	break;
-        case LOG_TYPE_ERROR:
-    	fMl1.logErrorMessage(msg);
-    	break;
-        case LOG_TYPE_CRITICAL:
-    	fMl1.logCriticalMessage(msg);
-    	break;
-    }
-
-    return  msg.msg();*/
 }
 
 const std::string Logger::logMessage(LOG_TYPE logLevel, const Message& msg, const LoggingID& logInfo)

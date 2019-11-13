@@ -68,6 +68,29 @@ namespace WriteEngine
 {
 StopWatch timer;
 
+int convertRcIntoErr(int rc)
+{
+    switch(rc)
+    {
+        case BRM::ERR_DEADLOCK:
+            return ERR_BRM_DEAD_LOCK;
+
+        case BRM::ERR_VBBM_OVERFLOW:
+            return ERR_BRM_VB_OVERFLOW;
+
+        case BRM::ERR_NETWORK:
+            return ERR_BRM_NETWORK;
+
+        case BRM::ERR_READONLY:
+            return ERR_BRM_READONLY;
+
+        default:
+            return ERR_BRM_BEGIN_COPY;
+    }
+
+    return rc;
+}
+
 /**@brief WriteEngineWrapper Constructor
 */
 WriteEngineWrapper::WriteEngineWrapper() :  m_opType(NOOP)
@@ -4478,6 +4501,13 @@ int WriteEngineWrapper::writeColumnRecords(const TxnID& txnid,
             }
 
             BRMWrapper::getInstance()->writeVBEnd(txnid, rangeList);
+
+            // MCOL-3490
+            logging::Message::Args args;
+            args.add("processVersionBuffers1");
+            args.add(convertRcIntoErr(rc));
+            args.add(rc);
+            SimpleSysLog::instance()->logMsg(args, logging::LOG_TYPE_ERROR, logging::M0105);
             break;
         }
 
@@ -4711,6 +4741,14 @@ int WriteEngineWrapper::writeColumnRec(const TxnID& txnid,
                         }
 
                         BRMWrapper::getInstance()->writeVBEnd(txnid, rangeList);
+
+                        // MCOL-3490
+                        logging::Message::Args args;
+                        args.add("processVersionBuffers2");
+                        args.add(convertRcIntoErr(rc));
+                        args.add(rc);
+                        SimpleSysLog::instance()->logMsg(args, logging::LOG_TYPE_ERROR, logging::M0105);
+
                         break;
                     }
                 }
@@ -4880,10 +4918,17 @@ int WriteEngineWrapper::writeColumnRec(const TxnID& txnid,
                 {
                     if (newColStructList[i].fCompressionType == 0)
                     {
-                        curCol.dataFile.pFile->flush();
+                    curCol.dataFile.pFile->flush();
                     }
 
                     BRMWrapper::getInstance()->writeVBEnd(txnid, rangeList);
+                    // MCOL-3490
+                    logging::Message::Args args;
+                    args.add("processVersionBuffers3");
+                    args.add(convertRcIntoErr(rc));
+                    args.add(rc);
+                    SimpleSysLog::instance()->logMsg(args, logging::LOG_TYPE_ERROR, logging::M0105);
+
                     break;
                 }
             }
@@ -5056,12 +5101,19 @@ int WriteEngineWrapper::writeColumnRec(const TxnID& txnid,
                     }
 
                     BRMWrapper::getInstance()->writeVBEnd(txnid, rangeList);
+
+                    // MCOL-3490
+                    logging::Message::Args args;
+                    args.add("processVersionBuffers4");
+                    args.add(convertRcIntoErr(rc));
+                    args.add(rc);
+                    SimpleSysLog::instance()->logMsg(args, logging::LOG_TYPE_ERROR, logging::M0105);
+
                     break;
                 }
             }
 
             // have to init the size here
-//       nullArray = (bool*) malloc(sizeof(bool) * totalRow);
             switch (colStructList[i].colType)
             {
                 case WriteEngine::WR_INT:
@@ -5282,6 +5334,14 @@ int WriteEngineWrapper::writeColumnRecBinary(const TxnID& txnid,
                     }
 
                     BRMWrapper::getInstance()->writeVBEnd(txnid, rangeList);
+
+                    // MCOL-3490
+                    logging::Message::Args args;
+                    args.add("processVersionBuffers5");
+                    args.add(convertRcIntoErr(rc));
+                    args.add(rc);
+                    SimpleSysLog::instance()->logMsg(args, logging::LOG_TYPE_ERROR, logging::M0105);
+
                     break;
                 }
             }
@@ -5423,6 +5483,14 @@ int WriteEngineWrapper::writeColumnRecBinary(const TxnID& txnid,
                     }
 
                     BRMWrapper::getInstance()->writeVBEnd(txnid, rangeList);
+
+                    // MCOL-3490
+                    logging::Message::Args args;
+                    args.add("processVersionBuffers6");
+                    args.add(convertRcIntoErr(rc));
+                    args.add(rc);
+                    SimpleSysLog::instance()->logMsg(args, logging::LOG_TYPE_ERROR, logging::M0105);
+
                     break;
                 }
             }
@@ -5628,12 +5696,6 @@ int WriteEngineWrapper::writeColumnRec(const TxnID& txnid,
             files.push_back(aFile);
         }
 
-        // handling versioning
-        //cout << " pass to processVersionBuffer rid " << rowIdArray[0] << endl;
-        //cout << "dataOid:fColPartition = " << curColStruct.dataOid << ":" << curColStruct.fColPartition << endl;
-//timer.start("processVersionBuffers");
-        //vector<LBIDRange>   rangeList;
-        // rc = processVersionBuffers(curCol.dataFile.pFile, txnid, curColStruct, curColStruct.colWidth, totalRow, ridList, rangeList);
         std::vector<VBRange> curFreeList;
         uint32_t blockUsed = 0;
 
@@ -5647,7 +5709,6 @@ int WriteEngineWrapper::writeColumnRec(const TxnID& txnid,
                     aRange.vbFBO = freeList[0].vbFBO + blocksProcessed;
                     aRange.size = rangeLists[i].size();
                     curFreeList.push_back(aRange);
-                    //cout << "range size = " << aRange.size <<" and blocksProcessed = " << blocksProcessed<< endl;
                 }
                 else
                 {
@@ -5686,7 +5747,7 @@ int WriteEngineWrapper::writeColumnRec(const TxnID& txnid,
         }
 
         //timer.stop("Delete:writeVB");
-//timer.stop("processVersionBuffers");
+        //timer.stop("processVersionBuffers");
         // cout << " rc for processVersionBuffer is " << rc << endl;
         if (rc != NO_ERROR)
         {
