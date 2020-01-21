@@ -992,6 +992,7 @@ void BatchPrimitiveProcessor::executeTupleJoin()
                 else
                     largeKey = oldRow.getIntField(colIndex);
 
+                bool joinerIsEmpty = tJoiners[j]->empty() ? true : false; 
                 found = (tJoiners[j]->find(largeKey) != tJoiners[j]->end());
                 isNull = oldRow.isNullValue(colIndex);
                 /* These conditions define when the row is NOT in the result set:
@@ -1001,7 +1002,7 @@ void BatchPrimitiveProcessor::executeTupleJoin()
                  */
 
                 if (((!found || isNull) && !(joinTypes[j] & (LARGEOUTER | ANTI))) ||
-                        ((joinTypes[j] & ANTI) && ((isNull && (joinTypes[j] & MATCHNULLS)) || (found && !isNull))))
+                        ((joinTypes[j] & ANTI) && !joinerIsEmpty && ((isNull && (joinTypes[j] & MATCHNULLS)) || (found && !isNull))))
                 {
                     //cout << " - not in the result set\n";
                     break;
